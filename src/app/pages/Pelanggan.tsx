@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Filter, Plus, Edit, Trash2, Users, UserPlus, UserCheck } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { StatsCard } from "../components/StatsCard";
+import { AddCustomerModal } from "../components/AddCustomerModal";
+import { toast } from "sonner";
 
 interface Customer {
-  id: string;
+  id: number;
   nama: string;
   email: string;
   telepon: string;
@@ -15,45 +17,6 @@ interface Customer {
   totalBelanja: number;
   tier: "regular" | "silver" | "gold" | "platinum";
 }
-
-const mockCustomers: Customer[] = [
-  {
-    id: "CST001",
-    nama: "Budi Santoso",
-    email: "budi@email.com",
-    telepon: "08123456789",
-    totalTransaksi: 15,
-    totalBelanja: 45000000,
-    tier: "gold",
-  },
-  {
-    id: "CST002",
-    nama: "Rina Wijaya",
-    email: "rina@email.com",
-    telepon: "08198765432",
-    totalTransaksi: 8,
-    totalBelanja: 12000000,
-    tier: "silver",
-  },
-  {
-    id: "CST003",
-    nama: "Dedi Kurniawan",
-    email: "dedi@email.com",
-    telepon: "08567891234",
-    totalTransaksi: 3,
-    totalBelanja: 5000000,
-    tier: "regular",
-  },
-  {
-    id: "CST004",
-    nama: "Ani Rahmawati",
-    email: "ani@email.com",
-    telepon: "08234567890",
-    totalTransaksi: 25,
-    totalBelanja: 78000000,
-    tier: "platinum",
-  },
-];
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("id-ID", {
@@ -64,9 +27,65 @@ const formatCurrency = (amount: number) => {
 };
 
 export function Pelanggan() {
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const filteredCustomers = mockCustomers.filter((customer) =>
+  // Fetch customers
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  const fetchCustomers = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("http://localhost:3001/api/customers");
+      if (!response.ok) throw new Error("Failed to fetch customers");
+      const data = await response.json();
+      setCustomers(data);
+    } catch (error) {
+      toast.error("Error", {
+        description: "Gagal memuat pelanggan dari server",
+      });
+      console.error("Error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddCustomer = () => {
+    setEditingCustomer(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEditCustomer = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteCustomer = async (id: number) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus pelanggan ini?")) return;
+
+    try {
+      const response = await fetch(`http://localhost:3001/api/customers/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) throw new Error("Failed to delete customer");
+
+      toast.success("Pelanggan berhasil dihapus!");
+      fetchCustomers();
+    } catch (error) {
+      toast.error("Error", {
+        description: "Gagal menghapus pelanggan",
+      });
+      console.error("Error:", error);
+    }
+  };
+
+  const filteredCustomers = customers.filter((customer) =>
     Object.values(customer).some((value) =>
       value.toString().toLowerCase().includes(searchQuery.toLowerCase())
     )
@@ -99,7 +118,7 @@ export function Pelanggan() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatsCard
           title="Total Pelanggan"
-          value="856"
+          value={customers.length.toString()}
           change="+24"
           isPositive={true}
           icon={Users}
@@ -108,7 +127,7 @@ export function Pelanggan() {
         />
         <StatsCard
           title="Pelanggan Baru"
-          value="42"
+          value={customers.filter(c => c.tier === "regular").length.toString()}
           change="+12"
           isPositive={true}
           icon={UserPlus}
@@ -116,8 +135,8 @@ export function Pelanggan() {
           iconColor="text-green-600 dark:text-green-400"
         />
         <StatsCard
-          title="Member Aktif"
-          value="623"
+          title="Member Premium"
+          value={customers.filter(c => c.tier !== "regular").length.toString()}
           change="+8"
           isPositive={true}
           icon={UserCheck}
@@ -130,7 +149,7 @@ export function Pelanggan() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Daftar Pelanggan</CardTitle>
-            <Button className="gap-2">
+            <Button onClick={handleAddCustomer} className="gap-2">
               <Plus className="w-4 h-4" />
               Tambah Pelanggan
             </Button>
@@ -154,86 +173,111 @@ export function Pelanggan() {
             </Button>
           </div>
 
-          <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-800/50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      ID
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Nama
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Email
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Telepon
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Total Transaksi
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Total Belanja
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Tier
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Aksi
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                  {filteredCustomers.map((customer) => (
-                    <tr
-                      key={customer.id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                    >
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                        {customer.id}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                        {customer.nama}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                        {customer.email}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                        {customer.telepon}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                        {customer.totalTransaksi}x
-                      </td>
-                      <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">
-                        {formatCurrency(customer.totalBelanja)}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        {getTierBadge(customer.tier)}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </td>
+          {loading ? (
+            <div className="text-center py-8 text-gray-500">Loading...</div>
+          ) : (
+            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-gray-800/50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        ID
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Nama
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Email
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Telepon
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Total Transaksi
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Total Belanja
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Tier
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Aksi
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {filteredCustomers.map((customer) => (
+                      <tr
+                        key={customer.id}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                      >
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                          {customer.id}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                          {customer.nama}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                          {customer.email}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                          {customer.telepon}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                          {customer.totalTransaksi}x
+                        </td>
+                        <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">
+                          {formatCurrency(customer.totalBelanja)}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {getTierBadge(customer.tier)}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={() => handleEditCustomer(customer)}
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              onClick={() => handleDeleteCustomer(customer.id)}
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filteredCustomers.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    Tidak ada pelanggan ditemukan
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
+
+      <AddCustomerModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingCustomer(null);
+        }}
+        onCustomerAdded={fetchCustomers}
+        customer={editingCustomer}
+      />
     </div>
   );
 }

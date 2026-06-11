@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Filter, ChevronLeft, ChevronRight, Edit, Trash2, Plus } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/Card";
 import { Input } from "./ui/Input";
 import { Button } from "./ui/Button";
 import { Badge } from "./ui/Badge";
+import { toast } from "sonner";
 import { cn } from "../lib/utils";
 
 interface Transaction {
-  id: string;
+  id: number;
   namaBarang: string;
   jumlah: number;
   hargaBeli: number;
@@ -16,101 +17,13 @@ interface Transaction {
   diskon: number;
   pajak: number;
   kasir: string;
-  tipePembayaran: string;
   metodePembayaran: string;
   emailPelanggan: string;
   namaPelanggan: string;
   catatan: string;
-  status: "lunas" | "pending" | "batal";
+  status?: "lunas" | "pending" | "batal";
+  createdAt?: string;
 }
-
-const mockTransactions: Transaction[] = [
-  {
-    id: "TRX001",
-    namaBarang: "Laptop Asus ROG",
-    jumlah: 1,
-    hargaBeli: 15000000,
-    hargaJual: 18000000,
-    total: 18000000,
-    diskon: 500000,
-    pajak: 1800000,
-    kasir: "Ahmad",
-    tipePembayaran: "Non Tunai",
-    metodePembayaran: "Credit Card",
-    emailPelanggan: "budi@email.com",
-    namaPelanggan: "Budi Santoso",
-    catatan: "Pengiriman express",
-    status: "lunas",
-  },
-  {
-    id: "TRX002",
-    namaBarang: "Mouse Logitech MX Master",
-    jumlah: 2,
-    hargaBeli: 800000,
-    hargaJual: 1000000,
-    total: 2000000,
-    diskon: 0,
-    pajak: 200000,
-    kasir: "Siti",
-    tipePembayaran: "Tunai",
-    metodePembayaran: "Cash",
-    emailPelanggan: "rina@email.com",
-    namaPelanggan: "Rina Wijaya",
-    catatan: "",
-    status: "lunas",
-  },
-  {
-    id: "TRX003",
-    namaBarang: "Keyboard Mechanical Keychron",
-    jumlah: 1,
-    hargaBeli: 1200000,
-    hargaJual: 1500000,
-    total: 1500000,
-    diskon: 100000,
-    pajak: 150000,
-    kasir: "Ahmad",
-    tipePembayaran: "Non Tunai",
-    metodePembayaran: "E-Wallet",
-    emailPelanggan: "dedi@email.com",
-    namaPelanggan: "Dedi Kurniawan",
-    catatan: "Paket hadiah",
-    status: "pending",
-  },
-  {
-    id: "TRX004",
-    namaBarang: "Monitor LG UltraWide",
-    jumlah: 1,
-    hargaBeli: 4000000,
-    hargaJual: 5000000,
-    total: 5000000,
-    diskon: 250000,
-    pajak: 500000,
-    kasir: "Siti",
-    tipePembayaran: "Non Tunai",
-    metodePembayaran: "Debit Card",
-    emailPelanggan: "ani@email.com",
-    namaPelanggan: "Ani Rahmawati",
-    catatan: "Garansi 3 tahun",
-    status: "lunas",
-  },
-  {
-    id: "TRX005",
-    namaBarang: "Webcam Logitech C920",
-    jumlah: 3,
-    hargaBeli: 1000000,
-    hargaJual: 1300000,
-    total: 3900000,
-    diskon: 0,
-    pajak: 390000,
-    kasir: "Ahmad",
-    tipePembayaran: "Tunai",
-    metodePembayaran: "Cash",
-    emailPelanggan: "joko@email.com",
-    namaPelanggan: "Joko Widodo",
-    catatan: "Untuk kantor",
-    status: "lunas",
-  },
-];
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("id-ID", {
@@ -125,11 +38,58 @@ interface TransactionTableProps {
 }
 
 export function TransactionTable({ onAddTransaction }: TransactionTableProps) {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [loading, setLoading] = useState(true);
   const itemsPerPage = 5;
 
-  const filteredTransactions = mockTransactions.filter((transaction) =>
+  // Fetch transactions dari API
+  useEffect(() => {
+    fetchTransactions();
+  }, []);
+
+  const fetchTransactions = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("http://localhost:3001/api/transactions");
+      if (!response.ok) throw new Error("Failed to fetch transactions");
+      const data = await response.json();
+      setTransactions(data);
+    } catch (error) {
+      toast.error("Error", {
+        description: "Gagal memuat transaksi dari server",
+      });
+      console.error("Error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTransaction = async (id: number) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus transaksi ini?")) return;
+
+    try {
+      const response = await fetch(
+        `http://localhost:3001/api/transactions/${id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to delete transaction");
+
+      toast.success("Transaksi berhasil dihapus!");
+      fetchTransactions();
+    } catch (error) {
+      toast.error("Error", {
+        description: "Gagal menghapus transaksi",
+      });
+      console.error("Error:", error);
+    }
+  };
+
+  const filteredTransactions = transactions.filter((transaction) =>
     Object.values(transaction).some((value) =>
       value.toString().toLowerCase().includes(searchQuery.toLowerCase())
     )
@@ -142,14 +102,19 @@ export function TransactionTable({ onAddTransaction }: TransactionTableProps) {
     startIndex + itemsPerPage
   );
 
-  const getStatusBadge = (status: Transaction["status"]) => {
-    switch (status) {
+  const getStatusBadge = (status?: Transaction["status"]) => {
+    // Default ke "lunas" jika tidak ada status
+    const actualStatus = status || "lunas";
+    
+    switch (actualStatus) {
       case "lunas":
         return <Badge variant="success">Lunas</Badge>;
       case "pending":
         return <Badge variant="warning">Pending</Badge>;
       case "batal":
         return <Badge variant="destructive">Batal</Badge>;
+      default:
+        return <Badge variant="success">Lunas</Badge>;
     }
   };
 
@@ -229,7 +194,13 @@ export function TransactionTable({ onAddTransaction }: TransactionTableProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                {paginatedTransactions.length === 0 ? (
+                {loading ? (
+                  <tr>
+                    <td colSpan={13} className="px-4 py-12 text-center">
+                      <div className="text-gray-500">Loading...</div>
+                    </td>
+                  </tr>
+                ) : paginatedTransactions.length === 0 ? (
                   <tr>
                     <td colSpan={13} className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center justify-center text-gray-500 dark:text-gray-400">
@@ -275,12 +246,7 @@ export function TransactionTable({ onAddTransaction }: TransactionTableProps) {
                         {transaction.kasir}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                        <div className="flex flex-col gap-1">
-                          <span className="font-medium">{transaction.metodePembayaran}</span>
-                          <span className="text-xs text-gray-500">
-                            {transaction.tipePembayaran}
-                          </span>
-                        </div>
+                        {transaction.metodePembayaran}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
                         <div className="flex flex-col gap-1">
@@ -299,6 +265,7 @@ export function TransactionTable({ onAddTransaction }: TransactionTableProps) {
                             <Edit className="w-4 h-4" />
                           </Button>
                           <Button
+                            onClick={() => handleDeleteTransaction(transaction.id)}
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"

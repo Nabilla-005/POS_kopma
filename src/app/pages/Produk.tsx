@@ -1,16 +1,15 @@
-import { useEffect, useState } from "react";
-import { Search, Filter, Plus, Edit, Trash2, Package } from "lucide-react";
-import { toast } from "sonner";
+import { useState, useEffect } from "react";
+import { Search, Filter, Plus, Edit, Trash2, Package, AlertTriangle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { StatsCard } from "../components/StatsCard";
-import { ProductModal } from "../components/ProductModal";
-import { DeleteConfirmDialog } from "../components/DeleteConfirmDialog";
+import { AddProductModal } from "../components/AddProductModal";
+import { toast } from "sonner";
 
 interface Product {
-  id: string;
+  id: number;
   nama: string;
   kategori: string;
   hargaBeli: number;
@@ -28,76 +27,69 @@ const formatCurrency = (amount: number) => {
 };
 
 export function Produk() {
+  const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch products
   useEffect(() => {
-  fetch("http://localhost:5000/produk")
-    .then((res) => res.json())
-    .then((data) => setProducts(data))
-    .catch((err) => console.log(err));
-}, []);
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("http://localhost:3001/api/products");
+      if (!response.ok) throw new Error("Failed to fetch products");
+      const data = await response.json();
+      setProducts(data);
+    } catch (error) {
+      toast.error("Error", {
+        description: "Gagal memuat produk dari server",
+      });
+      console.error("Error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddProduct = () => {
+    setEditingProduct(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteProduct = async (id: number) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus produk ini?")) return;
+
+    try {
+      const response = await fetch(`http://localhost:3001/api/products/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) throw new Error("Failed to delete product");
+
+      toast.success("Produk berhasil dihapus!");
+      fetchProducts();
+    } catch (error) {
+      toast.error("Error", {
+        description: "Gagal menghapus produk",
+      });
+      console.error("Error:", error);
+    }
+  };
+
   const filteredProducts = products.filter((product) =>
     Object.values(product).some((value) =>
       value.toString().toLowerCase().includes(searchQuery.toLowerCase())
     )
   );
-
-  const handleAddProduct = () => {
-    setSelectedProduct(null);
-    setIsModalOpen(true);
-  };
-
-  const handleEditProduct = (product: Product) => {
-    setSelectedProduct(product);
-    setIsModalOpen(true);
-  };
-
-  const handleDeleteClick = (product: Product) => {
-    setProductToDelete(product);
-    setIsDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = () => {
-    if (productToDelete) {
-      setProducts(products.filter((p) => p.id !== productToDelete.id));
-      toast.success("Produk berhasil dihapus!", {
-        description: `${productToDelete.nama} telah dihapus dari daftar produk.`,
-      });
-      setProductToDelete(null);
-    }
-  };
-
-const handleSaveProduct = async (productData: any) => {
-  try {
-    await fetch("http://localhost:5000/produk", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(productData),
-    });
-
-    // reload data dari database
-    const response = await fetch("http://localhost:5000/produk");
-    const data = await response.json();
-
-    setProducts(data);
-    setIsModalOpen(false);
-
-    toast.success("Produk berhasil ditambahkan");
-  } catch (error) {
-    console.log(error);
-    toast.error("Gagal menambahkan produk");
-  }
-};
-
-  const totalProducts = products.length;
-  const availableProducts = products.filter((p) => p.status === "tersedia").length;
-  const lowStockProducts = products.filter((p) => p.stok > 0 && p.stok < 10).length;
 
   const getStatusBadge = (status: Product["status"]) => {
     switch (status) {
@@ -121,35 +113,44 @@ const handleSaveProduct = async (productData: any) => {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatsCard
-          title="Total Produk"
-          value={totalProducts.toString()}
-          change="+12"
-          isPositive={true}
-          icon={Package}
-          iconBgColor="bg-blue-100 dark:bg-blue-900/20"
-          iconColor="text-blue-600 dark:text-blue-400"
-        />
-        <StatsCard
-          title="Produk Tersedia"
-          value={availableProducts.toString()}
-          change="+5"
-          isPositive={true}
-          icon={Package}
-          iconBgColor="bg-green-100 dark:bg-green-900/20"
-          iconColor="text-green-600 dark:text-green-400"
-        />
-        <StatsCard
-          title="Stok Menipis"
-          value={lowStockProducts.toString()}
-          change="+3"
-          isPositive={false}
-          icon={Package}
-          iconBgColor="bg-orange-100 dark:bg-orange-900/20"
-          iconColor="text-orange-600 dark:text-orange-400"
-        />
-      </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+  <StatsCard
+    title="Total Produk"
+    value={products.length.toString()}
+    change="+12"
+    isPositive={true}
+    icon={Package}
+    iconBgColor="bg-blue-100 dark:bg-blue-900/20"
+    iconColor="text-blue-600 dark:text-blue-400"
+  />
+  <StatsCard
+    title="Produk Tersedia"
+    value={products.filter(p => p.status === "tersedia").length.toString()}
+    change="+5"
+    isPositive={true}
+    icon={Package}
+    iconBgColor="bg-green-100 dark:bg-green-900/20"
+    iconColor="text-green-600 dark:text-green-400"
+  />
+  <StatsCard
+    title="Stok Habis"
+    value={products.filter(p => p.status === "habis").length.toString()}
+    change="+3"
+    isPositive={false}
+    icon={Package}
+    iconBgColor="bg-red-100 dark:bg-red-900/20"
+    iconColor="text-red-600 dark:text-red-400"
+  />
+  <StatsCard
+    title="Stok Menipis"
+    value={products.filter(p => p.stok > 0 && p.stok <= 5).length.toString()}
+    change=""
+    isPositive={false}
+    icon={AlertTriangle}
+    iconBgColor="bg-orange-100 dark:bg-orange-900/20"
+    iconColor="text-orange-600 dark:text-orange-400"
+  />
+</div>
 
       <Card>
         <CardHeader>
@@ -179,107 +180,132 @@ const handleSaveProduct = async (productData: any) => {
             </Button>
           </div>
 
-          <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-800/50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      ID Produk
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Nama Produk
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Kategori
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Harga Beli
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Harga Jual
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Stok
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
-                      Aksi
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                  {filteredProducts.map((product) => (
-                    <tr
-                      key={product.id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                    >
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                        {product.id}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                        {product.nama}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                        {product.kategori}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                        {formatCurrency(product.hargaBeli)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                        {formatCurrency(product.hargaJual)}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">
-                        {product.stok}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        {getStatusBadge(product.status)}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
+          {loading ? (
+            <div className="text-center py-8 text-gray-500">Loading...</div>
+          ) : (
+            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-gray-800/50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        ID
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Nama Produk
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Kategori
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Harga Beli
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Harga Jual
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Stok
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Aksi
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {filteredProducts.map((product) => (
+                      <tr
+                          key={product.id}
+                          className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                            product.stok === 0
+                              ? "bg-red-50/50 dark:bg-red-900/10"
+                              : product.stok <= 5
+                              ? "bg-orange-50/50 dark:bg-orange-900/10"
+                              : ""
+                          }`}
+                        >
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                          {product.id}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                          {product.nama}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                          {product.kategori}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                          {formatCurrency(product.hargaBeli)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                          {formatCurrency(product.hargaJual)}
+                        </td>
+                       <td className="px-4 py-3 text-sm font-semibold">
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleEditProduct(product)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                            onClick={() => handleDeleteClick(product)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          <span className={
+                            product.stok === 0
+                              ? "text-red-600 dark:text-red-400"
+                              : product.stok <= 5
+                              ? "text-orange-600 dark:text-orange-400"
+                              : "text-gray-900 dark:text-white"
+                          }>
+                            {product.stok}
+                          </span>
+                          {product.stok <= 5 && product.stok > 0 && (
+                            <AlertTriangle className="w-4 h-4 text-orange-500" />
+                          )}
+                          {product.stok === 0 && (
+                            <AlertTriangle className="w-4 h-4 text-red-500" />
+                          )}
                         </div>
                       </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        <td className="px-4 py-3 text-sm">
+                          {getStatusBadge(product.status)}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={() => handleEditProduct(product)}
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              onClick={() => handleDeleteProduct(product.id)}
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filteredProducts.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    Tidak ada produk ditemukan
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
-      <ProductModal
+      <AddProductModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSave={handleSaveProduct}
-        product={selectedProduct}
-      />
-
-      <DeleteConfirmDialog
-        isOpen={isDeleteDialogOpen}
-        onClose={() => setIsDeleteDialogOpen(false)}
-        onConfirm={handleDeleteConfirm}
-        title="Hapus Produk"
-        description="Apakah Anda yakin ingin menghapus produk ini? Tindakan ini tidak dapat dibatalkan."
-        itemName={productToDelete?.nama}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingProduct(null);
+        }}
+        onProductAdded={fetchProducts}
+        product={editingProduct}
       />
     </div>
   );
